@@ -1,0 +1,3 @@
+add_executable(model_cache_benchmark benchmark_main.cpp)
+target_link_libraries(model_cache_benchmark PRIVATE ModelCache::model_cache)
+target_compile_features(model_cache_benchmark PRIVATE cxx_std_20)
