@@ -270,6 +270,28 @@ int main(int argc, char** argv) {
       return 0;
     }
 
+    if (cmd == "explain") {
+      cli.ensure_cache();
+      mc::LookupRequest req;
+      if (!need("--key", "").empty()) { ArtifactId id; cli.parse_key(need("--key",""), id); req.id = id; }
+      if (!need("--role", "").empty()) req.role = mc::ArtifactRole(need("--role", ""));
+      if (!need("--type", "").empty()) req.type = mc::parse_artifact_type(need("--type", ""));
+      auto e = cli.cache->explain(req);
+      if (cli.json) {
+        std::printf("{\"requested\":%s,\"selected\":%s,\"validation\":%s,\"generation\":%llu,\"action\":%s,\"candidates\":%zu,\"rejected\":%zu}\n",
+                    json_escape(e.requested_identity).c_str(), e.selected_artifact ? json_escape(*e.selected_artifact).c_str() : "null",
+                    mc::to_string(e.validation), (unsigned long long)e.generation, mc::to_string(e.selected_action),
+                    e.candidates_evaluated.size(), e.candidates_rejected.size());
+      } else {
+        std::printf("requested=%s\nselected_action=%s\nvalidation=%s\ngeneration=%llu\ncandidates=%zu\n",
+                    e.requested_identity.c_str(), mc::to_string(e.selected_action), mc::to_string(e.validation),
+                    (unsigned long long)e.generation, e.candidates_evaluated.size());
+        if (e.selected_artifact) std::printf("selected=%s\n", e.selected_artifact->c_str());
+        for (auto& cr : e.candidates_rejected) std::printf("  rejected: %s (%s)\n", cr.first.c_str(), cr.second.c_str());
+      }
+      return 0;
+    }
+
     if (cmd == "snapshot" || cmd == "stats") {
       cli.ensure_cache();
       auto s = cli.cache->snapshot();
