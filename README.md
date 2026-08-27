@@ -115,13 +115,6 @@ Runnable examples demonstrate ingest, exact lookup, model/revision lookup, compa
 
 The benchmark measures completed work across scales (1, 10, 100, 1,000, plus snapshot and eviction at 5,000) and reports throughput and latency for hashing, ingest, lookup, dedup, manifest serialization, snapshot, eviction selection, persistence save, and recovery load.
 
-## Limitations
-
-- Primary validation target is Windows 11 x64 / MSVC / C++20 / CMake. Linux and macOS builds are supported by the platform layer but are not validated here.
-- No ML framework, GPU, or model-format dependency is required; the runtime does not parse complex formats (safetensors, ONNX, GGUF, TensorRT engines) unless a real parser is supplied and tested.
-- Remote fetching, inference, compilation, and serving are out of scope. Model Cache identifies reusable artifacts; it never fetches or executes them.
-- Distributed metadata exchange (a coordinator/node layer) is not part of the 1.0.0 core; the runtime is a single-process-per-cache-root model.
-
 ## License
 
-Apache License 2.0. Copyright 2026 Summon Software Labs.
+Apache License 2.0. Copyright 2026 Summon Software Labs. No telemetry transmission.
