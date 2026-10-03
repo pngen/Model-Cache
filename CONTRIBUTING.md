@@ -14,7 +14,6 @@ deterministic, warning-free codebase.
 ## Tests
 
 - The test suite lives in tests/ and uses a small dependency-free harness (tests/framework.hpp).
-  Tests must run to natural completion; never add a test timeout or rely on one.
 - New behavior must come with tests in the appropriate category (identity, compatibility,
   manifest, ingest, persistence, corruption, recovery, deduplication, reference counting, alias,
   generation, dependency graph, cycle rejection, admission, eviction, pinning, quarantine,
