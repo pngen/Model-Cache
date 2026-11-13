@@ -191,6 +191,9 @@ void Storage::save_manifest(const Manifest& m) const {
   platform::ensure_directory(path.substr(0, path.find_last_of('/')));
   canon::Writer w;
   m.to_canonical(w);
+  // Nothing is written that could not be read back under the same bound.
+  if (w.size() > config_.limits.max_metadata_bytes)
+    fail(ErrorCode::capacity_exceeded, "manifest metadata exceeds bound");
   platform::write_file_atomic(path, w.bytes().data(), w.size());
 }
 
@@ -267,15 +270,28 @@ std::string Storage::new_temp_path(const std::string& hint) const {
 // ---------------------------------------------------------------------------
 // recovery
 // ---------------------------------------------------------------------------
+namespace {
+// A staging file left behind by write_file_atomic is "<target>.tmp" followed only
+// by digits and dots. A stored file whose own name merely contains ".tmp" (an
+// artifact called "weights.tmp", say) is not one and must be kept.
+bool is_stale_temp(const std::string& name) {
+  const auto pos = name.rfind(".tmp");
+  if (pos == std::string::npos) return false;
+  const std::string rest = name.substr(pos + 4);
+  if (rest.find_first_of("0123456789") == std::string::npos) return false;
+  return rest.find_first_not_of("0123456789.") == std::string::npos;
+}
+}  // namespace
+
 void Storage::recover() {
-  // 1. Remove stale temp files anywhere under the root (patterns *.tmp*).
+  // 1. Remove stale temp files anywhere under the root.
   {
     std::error_code ec;
     auto purge = [&](const auto& self_ref, const std::string& dir) -> void {
       for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
         if (ec) break;
         if (e.is_directory()) { self_ref(self_ref, e.path().string()); }
-        else if (e.path().filename().string().find(".tmp") != std::string::npos) {
+        else if (is_stale_temp(e.path().filename().string())) {
           platform::remove_file_if_exists(e.path().string());
         }
       }

@@ -58,3 +58,73 @@ TEST(manifest_missing_member_invalid) {
   auto got = cache.manifest_get(ModelIdentity("org/m"), ModelRevision("r1"));
   CHECK_EQ(got->validation, ValidationState::INVALID);
 }
+
+TEST(manifest_is_invalid_once_a_member_is_gone) {
+  TempDir td;
+  {
+    ModelCache cache(td.join("root"));
+    const ArtifactId w(ArtifactNamespace("n"), "w1");
+    ingest_bytes(cache, w, spec(ArtifactType::MODEL_WEIGHTS, "weights", "1"), "w1");
+    Manifest m;
+    m.model = ModelIdentity("org/model"); m.revision = ModelRevision("rev1");
+    m.artifacts = {"n/w1"};
+    cache.manifest_add(m);
+    CHECK_EQ(cache.manifest_get(ModelIdentity("org/model"), ModelRevision("rev1"))->validation, ValidationState::VALID);
+    cache.purge(w);
+    CHECK_EQ(cache.manifest_get(ModelIdentity("org/model"), ModelRevision("rev1"))->validation, ValidationState::INVALID);
+  }
+  {
+    ModelCache cache(td.join("root"));
+    auto got = cache.manifest_get(ModelIdentity("org/model"), ModelRevision("rev1"));
+    CHECK(got.has_value());
+    if (got) CHECK_EQ(got->validation, ValidationState::INVALID);
+  }
+}
+
+TEST(manifest_survives_reopen) {
+  TempDir td;
+  {
+    ModelCache cache(td.join("root"));
+    ingest_bytes(cache, ArtifactId(ArtifactNamespace("n"), "w1"), spec(ArtifactType::MODEL_WEIGHTS, "weights", "1"), "w1");
+    Manifest m;
+    m.model = ModelIdentity("org/model"); m.revision = ModelRevision("rev1");
+    m.artifacts = {"n/w1"};
+    cache.manifest_add(m);
+  }
+  {
+    ModelCache cache(td.join("root"));
+    CHECK_EQ(cache.manifest_list().size(), 1u);
+    auto got = cache.manifest_get(ModelIdentity("org/model"), ModelRevision("rev1"));
+    CHECK(got.has_value());
+    if (got) {
+      CHECK_EQ(got->validation, ValidationState::VALID);
+      CHECK_EQ(got->artifacts.size(), 1u);
+    }
+  }
+}
+
+TEST(manifest_bounds_are_enforced) {
+  TempDir td;
+  Config cfg;
+  cfg.limits.max_manifest_count = 1;
+  cfg.limits.max_metadata_bytes = 4096;
+  {
+    ModelCache cache(td.join("root"), cfg);
+    Manifest m1;
+    m1.model = ModelIdentity("org/m"); m1.revision = ModelRevision("r1");
+    cache.manifest_add(m1);
+    Manifest m2;
+    m2.model = ModelIdentity("org/m"); m2.revision = ModelRevision("r2");
+    CHECK_THROWS(cache.manifest_add(m2), ErrorCode::capacity_exceeded);
+    CHECK_NO_THROW(cache.manifest_add(m1));   // replacing one that exists adds none
+    CHECK_EQ(cache.manifest_list().size(), 1u);
+    // A manifest that could not be read back under the metadata bound is not written.
+    Manifest big = m1;
+    for (int i = 0; i < 400; ++i) big.artifacts.push_back("n/artifact-number-" + std::to_string(i));
+    CHECK_THROWS(cache.manifest_add(big), ErrorCode::capacity_exceeded);
+    CHECK_EQ(cache.manifest_get(ModelIdentity("org/m"), ModelRevision("r1"))->artifacts.size(), 0u);
+  }
+  bool reopened = true;
+  try { ModelCache again(td.join("root"), cfg); } catch (...) { reopened = false; }
+  CHECK(reopened);
+}

@@ -70,3 +70,24 @@ TEST(enum_parser_rejects_unknown) {
   CHECK_THROWS(parse_validation_state("UNKNOWN_STATE"), ErrorCode::invalid_argument);
   CHECK_THROWS(parse_reuse_action("NOT_A_REUSE"), ErrorCode::invalid_argument);
 }
+
+TEST(reader_rejects_truncated_key) {
+  // A key that claims ten bytes and brings none.
+  const std::vector<std::uint8_t> data = {0x06, 0, 0, 0, 0, 0, 0, 0, 10};
+  Reader r(data.data(), data.size());
+  CHECK_THROWS(r.read_key(), ErrorCode::malformed_metadata);
+}
+
+TEST(stream_reader_cannot_overrun_the_buffer) {
+  TempDir td;
+  ModelCache cache(td.join("root"));
+  const ArtifactId id(ArtifactNamespace("n"), "s");
+  int calls = 0;
+  auto reader = [&calls](std::uint8_t* buf, std::size_t max) -> std::size_t {
+    if (++calls == 1) { for (std::size_t i = 0; i < 16 && i < max; ++i) buf[i] = 'x'; return 16; }
+    return static_cast<std::size_t>(-1);   // an error code returned as a size
+  };
+  CHECK_THROWS(cache.ingest_stream(id, spec(ArtifactType::MODEL_WEIGHTS, "weights", "1"), reader),
+               ErrorCode::invalid_argument);
+  CHECK(!cache.exists(id));
+}

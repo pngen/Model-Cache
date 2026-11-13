@@ -43,3 +43,19 @@ TEST(admission_event_and_stats) {
   CHECK(cache.stats().artifacts_admitted.load() >= 1u);
   CHECK_EQ(cache.snapshot().evicted >= 0u, true);
 }
+
+TEST(subscription_bound_counts_live_subscriptions) {
+  TempDir td;
+  Config cfg;
+  cfg.limits.max_subscriptions = 2;
+  ModelCache cache(td.join("root"), cfg);
+  bool threw = false;
+  try {
+    for (int i = 0; i < 10; ++i) {
+      Subscription s = cache.events().subscribe([](const Event&) {});
+      (void)s;   // unsubscribed when it goes out of scope
+    }
+  } catch (const model_cache::Error&) { threw = true; }
+  CHECK(!threw);
+  CHECK_EQ(cache.events().subscriber_count(), 0u);
+}

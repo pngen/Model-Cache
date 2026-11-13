@@ -214,6 +214,7 @@ class Reader {
     byte_checked(static_cast<std::uint8_t>(Tag::string));
     const auto n = read_len();
     if (n > lim_.max_string_bytes) malformed("key string exceeds max_string_bytes");
+    if (static_cast<std::size_t>(end_ - p_) < n) malformed("truncated key");
     std::string s(reinterpret_cast<const char*>(p_), n);
     p_ += n;
     return s;

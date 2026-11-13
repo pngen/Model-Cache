@@ -3,6 +3,7 @@
 #include "model_cache/digest.hpp"
 #include "model_cache/error.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <fstream>
@@ -118,9 +119,12 @@ std::string wide_to_utf8(const std::wstring& w) {
 void write_file_atomic(const std::string& path, const void* data, std::size_t bytes) {
   if (path.empty()) fail(ErrorCode::invalid_argument, "write_file_atomic: empty path");
 #ifdef _WIN32
-  static std::mt19937_64 rng(1234567);
-  const std::string tmp = path + ".tmp" + std::to_string(now_millis()) + "." +
-                          std::to_string(rng() & 0xffffffffu);
+  // Unique per call within the process and spread across processes; an atomic
+  // counter is safe from any thread. The suffix is no longer than it used to be.
+  static std::atomic<std::uint32_t> staged{0};
+  const std::uint32_t tag = (static_cast<std::uint32_t>(GetCurrentProcessId()) * 2654435761u) ^
+                            staged.fetch_add(1, std::memory_order_relaxed);
+  const std::string tmp = path + ".tmp" + std::to_string(now_millis()) + "." + std::to_string(tag);
   HANDLE h = CreateFileW(utf8_to_wide(tmp).c_str(), GENERIC_WRITE, 0, nullptr,
                          CREATE_NEW, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, nullptr);
   if (h == INVALID_HANDLE_VALUE) fail(ErrorCode::io_failure, "write_file_atomic: cannot create temp for '" + path + "'");
